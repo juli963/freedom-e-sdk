@@ -208,7 +208,7 @@ $(PROGRAM_ELF): \
 	$(MAKE) -C $(dir $@) $(notdir $@) \
 		CC=$(RISCV_GCC) \
 		CXX=$(RISCV_GXX) \
-		CFLAGS="-Os -march=$(RISCV_ARCH) -mabi=$(RISCV_ABI) -g" \
+		CFLAGS="-Os -march=$(RISCV_ARCH) -mabi=$(RISCV_ABI) -g -I$(abspath $(MEE_BSP_PATH)/install/include/)" \
 		CXXFLAGS="-Os -march=$(RISCV_ARCH) -mabi=$(RISCV_ABI) -g" \
 		LDFLAGS="-nostartfiles -nostdlib -L$(sort $(dir $(abspath $(filter %.a,$^)))) -T$(abspath $(filter %.lds,$^))" \
 		LDLIBS="-Wl,--start-group -lc -lmee -lmee-gloss -Wl,--end-group"
