@@ -2,6 +2,7 @@
 #include <mee/drivers/fixed-clock.h>
 #include <mee/drivers/sifive,gpio0.h>
 #include <mee/drivers/sifive,uart0.h>
+#include <mee/drivers/sifive,spi0.h>
 /* From clock@0 */
 asm (".weak __mee_dt_clock_0");
 struct __mee_driver_fixed_clock __mee_dt_clock_0;
@@ -13,6 +14,10 @@ struct __mee_driver_sifive_gpio0 __mee_dt_gpio_10012000;
 /* From serial@10013000 */
 asm (".weak __mee_dt_serial_10013000");
 struct __mee_driver_sifive_uart0 __mee_dt_serial_10013000;
+
+/* From spi@10014000 */
+asm (".weak __mee_dt_spi_10014000");
+struct __mee_driver_sifive_spi0 __mee_dt_spi_10014000;
 
 /* From clock@0 */
 struct __mee_driver_fixed_clock __mee_dt_clock_0 = {
@@ -40,6 +45,16 @@ struct __mee_driver_sifive_uart0 __mee_dt_serial_10013000 = {
     .pinmux = &__mee_dt_gpio_10012000,
     .pinmux_output_selector = 196608UL,
     .pinmux_source_selector = 196608UL,
+};
+
+/* From spi@10014000 */
+struct __mee_driver_sifive_spi0 __mee_dt_spi_10014000 = {
+    .vtable = &__mee_driver_vtable_sifive_spi0,
+    .spi.vtable = &__mee_driver_vtable_sifive_spi0.spi,
+    .control_base = 268517376UL,
+    .control_size = 4096UL,
+    .clock = NULL,
+    .pinmux = NULL,
 };
 
 /* From serial@10013000 */
