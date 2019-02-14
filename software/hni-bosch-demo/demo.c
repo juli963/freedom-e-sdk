@@ -31,7 +31,8 @@
 asm (".global _printf_float");
 
 /* this is global as this address is set up to be faulty */
-int16_t gx;
+extern int16_t *sensor_x_ptr;
+extern uint8_t *matrix_x_ptr;
 
 void delay_ms(uint32_t period)
 {
@@ -80,33 +81,34 @@ void get_sensor_data(struct bmi160_dev *sensor, int16_t *x, int16_t *y, int16_t 
 
 /* rendering code for the led-matrix */
 
-float cx = 15.0;
-float cy = 4.0;
-uint8_t dec_x;
-uint8_t dec_y;
+typedef struct {
+    float delta_x, delta_y;
+    float fx, fy;
+    uint8_t x, y;
+} LEDCoordinates;
 
-void render(void)
+void render(LEDCoordinates *coord)
 {
-    dec_x = (uint8_t) cx;
-    dec_y = (uint8_t) cy;
+    coord->x = (uint8_t) coord->fx;
+    coord->y = (uint8_t) coord->fy;
 
     clear();
-    print_at(dec_x, dec_y);
+    print_at(coord->x, coord->y);
 }
 
-void move_by_x(float dx)
+void move_by_x(LEDCoordinates *led)
 {
-    float nx = cx + dx;
+    float nx = led->fx + led->delta_x;
     if ( nx > 0.0 && nx < 32.0) {
-        cx = nx;
+        led->fx = nx;
     }
 }
 
-void move_by_y(float dy)
+void move_by_y(LEDCoordinates *led)
 {
-    float ny = cy + dy;
+    float ny = led->fy + led->delta_y;
     if ( ny > 0.0 && ny < 8.0) {
-        cy = ny;
+        led->fy = ny;
     }
 }
 
@@ -115,117 +117,17 @@ float smooth_data(int16_t x)
     return (x / 17000.0);
 }
 
-/* fault activation code:
- * This is activated using the buttons 0 and 1 on the arty board
- * which tigger an interrupt each that we handle here
- */
-uint8_t float_stuck = 0;
-uint8_t random_flip = 0;
-typedef void (*function_ptr_t) (void);
-void no_interrupt_handler (void) {}
-function_ptr_t g_ext_interrupt_handlers[PLIC_NUM_INTERRUPTS];
-plic_instance_t g_plic;
-
-
-void button_0_handler(void)
-{
-    float_stuck = 1 - float_stuck;
-    printf("Float_stuck = %d\n", float_stuck);
-
-    /* Custom fault injection registers:
-     * We write the to be faulty memory address into CSR 0xbc0
-     * and a mask to 0xbc1. Each set bit is then stuck-at 0
-     */
-    asm volatile ("csrw 0xbc0, %0" :: "r"(&gx));
-    asm volatile ("csrw 0xbc1, %0" :: "r"(0xffff3000));
-
-    /* CSR 0xbc4 holds the status flags for the fault injection registers.
-     * Writing 0x1 activates it, writing 0x0 deactivates it.
-     */
-    if (float_stuck) {
-        asm volatile ("csrw 0xbc4, %0" :: "r"(1));
-    } else {
-        asm volatile ("csrw 0xbc4, %0" :: "r"(0));
-    }
-    GPIO_REG(GPIO_RISE_IP) = (0x1 << BUTTON_0_OFFSET);
-}
-
-void button_1_handler(void)
-{
-    random_flip = 1 - random_flip;
-    printf("random flip = %d\n", random_flip);
-
-    /* 0xbc2 is the address register
-     * 0xbc3 is a mask
-     * On a read of address in 0xbc2 a random number is generated in hw and only
-     * the bits indicated on the mask are returned
-     */
-    asm volatile ("csrw 0xbc2, %0" :: "r"(&dec_x));
-    asm volatile ("csrw 0xbc3, %0" :: "r"(0x1f));
-    if (random_flip) {
-        asm volatile ("csrw 0xbc4, %0" :: "r"(2));
-    } else {
-        asm volatile ("csrw 0xbc4, %0" :: "r"(0));
-    }
-    GPIO_REG(GPIO_RISE_IP) = (0x1 << BUTTON_1_OFFSET);
-
-}
-
-void reset_demo(void)
-{
-    clear_csr(mie, MIP_MEIP);
-    clear_csr(mie, MIP_MTIP);
-
-    for (int ii = 0; ii < PLIC_NUM_INTERRUPTS; ii ++){
-      g_ext_interrupt_handlers[ii] = no_interrupt_handler;
-    }
-
-    GPIO_REG(GPIO_OUTPUT_EN)  &= ~((0x1 << BUTTON_0_OFFSET) | (0x1 << BUTTON_1_OFFSET));
-    GPIO_REG(GPIO_PULLUP_EN)  &= ~((0x1 << BUTTON_0_OFFSET) | (0x1 << BUTTON_1_OFFSET));
-    GPIO_REG(GPIO_INPUT_EN)   |=  ((0x1 << BUTTON_0_OFFSET) | (0x1 << BUTTON_1_OFFSET));
-
-    g_ext_interrupt_handlers[INT_DEVICE_BUTTON_0] = button_0_handler;
-    g_ext_interrupt_handlers[INT_DEVICE_BUTTON_1] = button_1_handler;
-
-    // Have to enable the interrupt both at the GPIO level,
-    // and at the PLIC level.
-    PLIC_enable_interrupt (&g_plic, INT_DEVICE_BUTTON_0);
-    PLIC_enable_interrupt (&g_plic, INT_DEVICE_BUTTON_1);
-
-    // Priority must be set > 0 to trigger the interrupt.
-    PLIC_set_priority(&g_plic, INT_DEVICE_BUTTON_0, 1);
-    PLIC_set_priority(&g_plic, INT_DEVICE_BUTTON_1, 1);
-
-    GPIO_REG(GPIO_RISE_IE) |= (1 << BUTTON_0_OFFSET);
-    GPIO_REG(GPIO_RISE_IE) |= (1 << BUTTON_1_OFFSET);
-
-    // Enable the Machine-External bit in MIE
-    set_csr(mie, MIP_MEIP);
-
-    // Enable interrupts in general.
-    set_csr(mstatus, MSTATUS_MIE);
-    printf("Reset Demo\n");
-}
-
-void handle_m_ext_interrupt(){
-  plic_source int_num  = PLIC_claim_interrupt(&g_plic);
-  if ((int_num >=1 ) && (int_num < PLIC_NUM_INTERRUPTS)) {
-    g_ext_interrupt_handlers[int_num]();
-  }
-  else {
-    exit(1 + (uintptr_t) int_num);
-  }
-  PLIC_complete_interrupt(&g_plic, int_num);
-}
-
+void init_plic(void);
 int main()
 {
+    int16_t x, y, z;
+    struct bmi160_dev sensor;
+
     UART_init(115200, 0);
 
     spi_begin(PIN_10_OFFSET, 65000000);
     setup_matrix();
 
-    struct bmi160_dev sensor;
     sensor.id = 0;
     sensor.interface = BMI160_SPI_INTF;
     sensor.read = &spi_read;
@@ -234,24 +136,26 @@ int main()
 
     bmi160_init(&sensor);
     config_sensors(&sensor);
-    PLIC_init(&g_plic, PLIC_CTRL_ADDR, PLIC_NUM_INTERRUPTS,
-              PLIC_NUM_PRIORITIES);
-    reset_demo();
+    init_plic();
 
-    int16_t y, z;
+    LEDCoordinates *led = malloc(sizeof(LEDCoordinates));
+    led->fx = 15.0;
+    led->fy = 7.0;
+    sensor_x_ptr = &x;
+    matrix_x_ptr = &led->x;
     while (1) {
-        get_sensor_data(&sensor, &gx, &y, &z);
-        float fx = smooth_data(gx);
-        float fy = smooth_data(y);
+        get_sensor_data(&sensor, &x, &y, &z);
+        led->delta_x = smooth_data(x);
+        led->delta_y = smooth_data(y);
 
-        if (fx > 0.03 || fx < -0.03) {
-            move_by_y(-fx);
+        if (led->delta_x > 0.03 || led->delta_x < -0.03) {
+            move_by_x(led);
         }
-        if (fy > 0.03 || fy < -0.03) {
-            move_by_x(-fy);
+        if (led->delta_y > 0.03 || led->delta_y < -0.03) {
+            move_by_y(led);
         }
-        render();
+        render(led);
     }
-
+    free(led);
     return 0;
 }
