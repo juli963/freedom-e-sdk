@@ -138,24 +138,25 @@ int main()
     config_sensors(&sensor);
     init_plic();
 
-    LEDCoordinates *led = malloc(sizeof(LEDCoordinates));
-    led->fx = 15.0;
-    led->fy = 7.0;
+    LEDCoordinates led;
+    led.fx = 15.0;
+    led.fy = 7.0;
     sensor_x_ptr = &x;
-    matrix_x_ptr = &led->x;
+    matrix_x_ptr = &led.x;
     while (1) {
+        // for safety measures: 
+        // LEDCoordinates led_dup = led; // should be led_dup(led)
         get_sensor_data(&sensor, &x, &y, &z);
-        led->delta_x = smooth_data(x);
-        led->delta_y = smooth_data(y);
+        led.delta_x = smooth_data(x);
+        led.delta_y = smooth_data(y);
 
-        if (led->delta_x > 0.03 || led->delta_x < -0.03) {
-            move_by_x(led);
+        if (led.delta_x > 0.03 || led.delta_x < -0.03) {
+            move_by_x(&led);
         }
-        if (led->delta_y > 0.03 || led->delta_y < -0.03) {
-            move_by_y(led);
+        if (led.delta_y > 0.03 || led.delta_y < -0.03) {
+            move_by_y(&led);
         }
-        render(led);
+        render(&led);
     }
-    free(led);
     return 0;
 }
