@@ -5,8 +5,8 @@
 
 static uint8_t float_stuck = 0;
 static uint8_t random_flip = 0;
-int16_t *sensor_x_ptr;
-uint8_t *matrix_x_ptr;
+float *sensor_x_ptr;
+float *matrix_fx_ptr;
 
 /* fault activation code:
  * This is activated using the buttons 0 and 1 on the arty board
@@ -21,22 +21,24 @@ static void button_0_handler(void)
 {
     float_stuck = 1 - float_stuck;
     printf("Float_stuck = %d\n", float_stuck);
+    uint32_t csr_val = read_csr(0xbc4);
 
     /* Custom fault injection registers:
      * We write the to be faulty memory address into CSR 0xbc0
      * and a mask to 0xbc1. Each set bit is then stuck-at 0
      */
-    asm volatile ("csrw 0xbc0, %0" :: "r"(sensor_x_ptr));
-    asm volatile ("csrw 0xbc1, %0" :: "r"(0xffff3000));
+    write_csr(0xbc0, sensor_x_ptr);
+    write_csr(0xbc1, 0xffffffff);
 
     /* CSR 0xbc4 holds the status flags for the fault injection registers.
      * Writing 0x1 activates it, writing 0x0 deactivates it.
      */
     if (float_stuck) {
-        asm volatile ("csrw 0xbc4, %0" :: "r"(1));
+        csr_val |= 1;
     } else {
-        asm volatile ("csrw 0xbc4, %0" :: "r"(0));
+        csr_val &= ~1;
     }
+    write_csr(0xbc4, csr_val);
     GPIO_REG(GPIO_RISE_IP) = (0x1 << BUTTON_0_OFFSET);
 }
 
@@ -44,19 +46,21 @@ static void button_1_handler(void)
 {
     random_flip = 1 - random_flip;
     printf("random flip = %d\n", random_flip);
+    uint32_t csr_val = read_csr(0xbc4);
 
     /* 0xbc2 is the address register
      * 0xbc3 is a mask
      * On a read of address in 0xbc2 a random number is generated in hw and only
      * the bits indicated on the mask are returned
      */
-    asm volatile ("csrw 0xbc2, %0" :: "r"(&matrix_x_ptr));
-    asm volatile ("csrw 0xbc3, %0" :: "r"(0x1f));
+    write_csr(0xbc2, matrix_fx_ptr);
+    write_csr(0xbc3, 0x41c00000);
     if (random_flip) {
-        asm volatile ("csrw 0xbc4, %0" :: "r"(2));
+        csr_val |= 2;
     } else {
-        asm volatile ("csrw 0xbc4, %0" :: "r"(0));
+        csr_val &= ~2;
     }
+    write_csr(0xbc4, csr_val);
     GPIO_REG(GPIO_RISE_IP) = (0x1 << BUTTON_1_OFFSET);
 
 }
@@ -94,6 +98,11 @@ void init_plic(void)
 
     // Enable the Machine-External bit in MIE
     set_csr(mie, MIP_MEIP);
+
+    // Setup LED for Fault indication
+    GPIO_REG(GPIO_INPUT_EN)    &= ~((0x1<< RED_LED_OFFSET) | (0x1<< GREEN_LED_OFFSET) | (0x1 << BLUE_LED_OFFSET));
+    GPIO_REG(GPIO_OUTPUT_EN)   |=  ((0x1<< RED_LED_OFFSET)| (0x1<< GREEN_LED_OFFSET) | (0x1 << BLUE_LED_OFFSET));
+    GPIO_REG(GPIO_OUTPUT_VAL)  &=  ~((0x1<< RED_LED_OFFSET) | (0x1<< GREEN_LED_OFFSET) | (0x1 << BLUE_LED_OFFSET));
 
     // Enable interrupts in general.
     set_csr(mstatus, MSTATUS_MIE);

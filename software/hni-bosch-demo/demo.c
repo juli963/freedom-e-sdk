@@ -31,8 +31,8 @@
 asm (".global _printf_float");
 
 /* this is global as this address is set up to be faulty */
-extern int16_t *sensor_x_ptr;
-extern uint8_t *matrix_x_ptr;
+extern float *sensor_x_ptr;
+extern float *matrix_fx_ptr;
 
 void delay_ms(uint32_t period)
 {
@@ -117,7 +117,6 @@ float smooth_data(int16_t x)
     return (x / 17000.0);
 }
 
-void init_plic(void);
 int main()
 {
     int16_t x, y, z;
@@ -141,10 +140,10 @@ int main()
     LEDCoordinates led;
     led.fx = 15.0;
     led.fy = 7.0;
-    sensor_x_ptr = &x;
-    matrix_x_ptr = &led.x;
+    sensor_x_ptr = &led.delta_x;
+    matrix_fx_ptr = &led.fx;
     while (1) {
-        // for safety measures: 
+        // for safety measures:
         // LEDCoordinates led_dup = led; // should be led_dup(led)
         get_sensor_data(&sensor, &x, &y, &z);
         led.delta_x = smooth_data(x);
