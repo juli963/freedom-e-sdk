@@ -1,4 +1,4 @@
-TARGET = hni-bosch-demo
+TARGET = led-bmi160-demonstator
 C_SRCS += demo.c spi.c common.c UART_driver.c bmi160.c led-matrix.c fault.c
 CFLAGS += -O2 -fno-builtin-printf -DUSE_PLIC
 

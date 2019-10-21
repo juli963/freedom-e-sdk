@@ -13,7 +13,7 @@ endif
 
 # Default target
 BOARD ?= freedom-e300-arty
-PROGRAM ?= hni-bosch-demo
+PROGRAM ?= led-bmi160-demonstrator
 LINK_TARGET ?= flash
 GDB_PORT ?= 3333
 
