@@ -147,8 +147,7 @@ $(builddir)/riscv-gnu-toolchain/%-elf/configure.stamp:
 		--disable-linux \
 		--enable-multilib \
 		--with-cmodel=medany \
-		--with-libgcc-cmodel \
-		--disable-gdb
+		--with-libgcc-cmodel 
 	date > $@
 
 .PHONY: toolchain-clean
