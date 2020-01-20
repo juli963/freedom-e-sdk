@@ -12,7 +12,7 @@ include $(extra_configs)
 endif
 
 # Default target
-BOARD ?= freedom-e300-arty
+BOARD ?= freedom-e300-hifive1
 PROGRAM ?= led-bmi160-demonstrator
 LINK_TARGET ?= flash
 GDB_PORT ?= 3333
@@ -147,8 +147,7 @@ $(builddir)/riscv-gnu-toolchain/%-elf/configure.stamp:
 		--disable-linux \
 		--enable-multilib \
 		--with-cmodel=medany \
-		--with-libgcc-cmodel \
-		--disable-gdb
+		--with-libgcc-cmodel 
 	date > $@
 
 .PHONY: toolchain-clean
