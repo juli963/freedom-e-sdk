@@ -37,10 +37,11 @@ void delay_ms(uint32_t period)
 
 /* Create Watchdog Structs */
 volatile struct wd_unit *wd_space[] = {0x10000200};
-#define WDKey_Mockaon 0x51F15E
-#define WDFeed 0xD09F00D
+
 enum Watchdog_Unit{WD_MockAON=0};
-const uint32_t watchdog_clocks[] = {32768};
+const uint32_t watchdog_clocks[] = {32768/2}; // Check if lfClock is really half of 32,768kHz
+const uint32_t watchdog_food[] = {0xD09F00D};
+const uint32_t watchdog_keys[] = {0x51F15E};
 const char* watchdog_names[] = {"MockAON"};
 // Wdog Mockaon CLK is lfclk -> nearly 32kHz
 
@@ -56,10 +57,12 @@ enum eConsoleModes {console_stat, console_feed, console_invert, console_config};
 uint32_t char_to_uint(char *c, uint8_t len){
     uint32_t result = 0;
     uint32_t mult = 1;
-    for(int16_t i = len-1; i>=0 ; i--){
-        if(c[i] >= 0x30 && c[i] <= 0x39){   // Only numbers 0-9
-            result += (c[i] - 0x30)*mult;
-            mult *= 10;
+    if (len >= 1){
+        for(int16_t i = len-1; i>=0 ; i--){
+            if(c[i] >= 0x30 && c[i] <= 0x39){   // Only numbers 0-9
+                result += (c[i] - 0x30)*mult;
+                mult *= 10;
+            }
         }
     }
     return result;
@@ -104,16 +107,14 @@ void print_watchdog_config(enum Watchdog_Unit unit, uint8_t subunit){
     wd_space[unit]->unit[subunit].cfg.field.outputen,\
     wd_space[unit]->unit[subunit].cfg.field.enalways,\
     wd_space[unit]->unit[subunit].cfg.field.encoreawake,\
-    (uint32_t)((wd_space[unit]->unit[subunit].count&0xFFFFFFFF00000000)>>32),\
-    (uint32_t)(wd_space[unit]->unit[subunit].count&0xFFFFFFFF),\
-    wd_space[unit]->unit[subunit].s,\
+    (uint32_t)((wd_space[unit]->unit[subunit].count & 0xFFFFFFFF00000000)>>32),\
+    (uint32_t)(wd_space[unit]->unit[subunit].count & 0xFFFFFFFF),\
+    (uint32_t)(wd_space[unit]->unit[subunit].s & 0xFFFFFFFF),/* Only lower 32 Bits */ \  
     wd_space[unit]->unit[subunit].compare[0],\
     wd_space[unit]->unit[subunit].compare[1],\
     wd_space[unit]->unit[subunit].pulsewidth,\
     wd_space[unit]->unit[subunit].mux \
     );
-    printf("\rPuls: %i Address: %p\n", wd_space[unit]->unit[subunit].pulsewidth, &wd_space[unit]->unit[subunit].pulsewidth);
-    printf("Mux: %i Address: %p\n", wd_space[unit]->unit[subunit].mux, &wd_space[unit]->unit[subunit].mux);
     print_watchdog_times(watchdog_clocks[unit], wd_space[unit]->unit[subunit].cfg.field.mode, wd_space[unit]->unit[subunit].cfg.field.scale, wd_space[unit]->unit[subunit].count, wd_space[unit]->unit[subunit].compare[0], wd_space[unit]->unit[subunit].compare[1], wd_space[unit]->unit[subunit].pulsewidth);
 }
 
@@ -130,15 +131,14 @@ void demo_WD_config(enum Watchdog_Unit selected_watchdog,uint8_t selected_subwat
         {
             case uart_mode:
                 printf("Enter Mode -> 0 = Timeout, 1 = Fenster\n");
-                ans = UART_get_char(&c,1);
-                if(ans == 0){
-                    if (c >= 0x30 && c <= 0x31){  // ASCII 0x30 = 0 -> Check if Input is within [0,1] else display Error
-                        temp_watchdog.cfg.field.mode = c - 0x30;
-                        State = uart_scale; 
-                        printf("Mode Value: %i\n", temp_watchdog.cfg.field.mode);
-                    }else{
-                        printf("Input %i out of Range. Type in a valid input otherwise use b or q to get back.\n", c);
-                    }
+                ans = UART_read_n(buffer, 20, '\r', 1);
+                temp32 = char_to_uint(buffer,ans);
+                if (temp32 >= 0 && temp32 <= 1){  // Check if Input is within [0,1] else display Error
+                    temp_watchdog.cfg.field.mode = temp32;
+                    State = uart_scale; 
+                    printf("Mode Value: %i\n", temp_watchdog.cfg.field.mode);
+                }else{
+                    printf("Input %i out of Range. Type in a valid input otherwise use b or q to get back.\n", c);
                 }
                 break;
             case uart_scale:
@@ -203,56 +203,52 @@ void demo_WD_config(enum Watchdog_Unit selected_watchdog,uint8_t selected_subwat
                 break;
             case uart_zero:
                 printf("Enter ZeroCmp Value -> 0 = Timer hold it's value on reset, 1 = Timer will be 0 after reset\n");
-                ans = UART_get_char(&c,1);
-                if(ans == 0){
-                    if (c >= 0x30 && c <= 0x31){  // ASCII 0x30 = 0 -> Check if Input is within [0,1] else display Error
-                        temp_watchdog.cfg.field.zerocmp = c - 0x30;
-                        State = uart_rsten; 
-                        printf("ZeroCmp Value: %i\n", temp_watchdog.cfg.field.zerocmp);
-                    }else{
-                        printf("Input %i out of Range. Type in a valid input otherwise use b or q to get back.\n", c);
-                    }
+                ans = UART_read_n(buffer, 20, '\r', 1);
+                temp32 = char_to_uint(buffer,ans);
+                if (temp32 >= 0 && temp32 <= 1){  // Check if Input is within [0,1] else display Error
+                    temp_watchdog.cfg.field.zerocmp = temp32;
+                    State = uart_rsten; 
+                    printf("ZeroCmp Value: %i\n", temp_watchdog.cfg.field.zerocmp);
+                }else{
+                    printf("Input %i out of Range. Type in a valid input otherwise use b or q to get back.\n", c);
                 }
                 break;
             case uart_rsten:
                 printf("Enter RstEN Value -> 0 = Resetoutput is Deactivated, 1 = Resetoutput is Activated\n");
-                ans = UART_get_char(&c,1);
-                if(ans == 0){
-                    if (c >= 0x30 && c <= 0x31){  // ASCII 0x30 = 0 -> Check if Input is within [0,1] else display Error
-                        temp_watchdog.cfg.field.outputen = c - 0x30;
-                        State = uart_always; 
-                        printf("RstEN Value: %i\n", temp_watchdog.cfg.field.outputen);
-                    }else{
-                        printf("Input %i out of Range. Type in a valid input otherwise use b or q to get back.\n", c);
-                    }
+                ans = UART_read_n(buffer, 20, '\r', 1);
+                temp32 = char_to_uint(buffer,ans);
+                if (temp32 >= 0 && temp32 <= 1){  // Check if Input is within [0,1] else display Error
+                    temp_watchdog.cfg.field.outputen = temp32;
+                    State = uart_always; 
+                    printf("RstEN Value: %i\n", temp_watchdog.cfg.field.outputen);
+                }else{
+                    printf("Input %i out of Range. Type in a valid input otherwise use b or q to get back.\n", c);
                 }
                 break;
             case uart_always:
                 printf("Enter CountAlways Value -> 0 = WD Counter is deactivated when CoreAwake 0, 1 = WD Counter is activated\n");
-                ans = UART_get_char(&c,1);
-                if(ans == 0){
-                    if (c >= 0x30 && c <= 0x31){  // ASCII 0x30 = 0 -> Check if Input is within [0,1] else display Error
-                        temp_watchdog.cfg.field.enalways = c - 0x30;
-                        State = uart_awake; 
-                        printf("CountAlways Value: %i\n", temp_watchdog.cfg.field.enalways);
-                    }else{
-                        printf("Input %i out of Range. Type in a valid input otherwise use b or q to get back.\n", c);
-                    }
+                ans = UART_read_n(buffer, 20, '\r', 1);
+                temp32 = char_to_uint(buffer,ans);
+                if (temp32 >= 0 && temp32 <= 1){  // Check if Input is within [0,1] else display Error
+                    temp_watchdog.cfg.field.enalways = temp32;
+                    State = uart_awake; 
+                    printf("CountAlways Value: %i\n", temp_watchdog.cfg.field.enalways);
+                }else{
+                    printf("Input %i out of Range. Type in a valid input otherwise use b or q to get back.\n", c);
                 }
                 break;
             case uart_awake:
                 printf("Enter CoreAwake Value -> 0 = WD Counter is deactivated when Always is 0, 1 = WD Counter is activated when Processor Core isn't sleeping \n");
-                ans = UART_get_char(&c,1);
-                if(ans == 0){
-                    if (c >= 0x30 && c <= 0x31){  // ASCII 0x30 = 0 -> Check if Input is within [0,1] else display Error
-                        temp_watchdog.cfg.field.encoreawake = c - 0x30;
-                        printf("CoreAwake Value: %i\n", temp_watchdog.cfg.field.encoreawake);
-                        configWatchdog(&temp_watchdog, wd_space[selected_watchdog], selected_subwatchdog, WDKey_Mockaon);
-                        print_watchdog_config(selected_watchdog, selected_subwatchdog);
-                        return;
-                    }else{
-                        printf("Input %i out of Range. Type in a valid input otherwise use b or q to get back.\n", c);
-                    }
+                ans = UART_read_n(buffer, 20, '\r', 1);
+                temp32 = char_to_uint(buffer,ans);
+                if (temp32 >= 0 && temp32 <= 1){  // Check if Input is within [0,1] else display Error
+                    temp_watchdog.cfg.field.encoreawake = temp32;
+                    printf("CoreAwake Value: %i\n", temp_watchdog.cfg.field.encoreawake);
+                    configWatchdog(&temp_watchdog, wd_space[selected_watchdog], selected_subwatchdog, watchdog_keys[selected_watchdog]);
+                    print_watchdog_config(selected_watchdog, selected_subwatchdog);
+                    return;
+                }else{
+                    printf("Input %i out of Range. Type in a valid input otherwise use b or q to get back.\n", c);
                 }
                 break;
             default:
@@ -311,6 +307,10 @@ void Console_Task(){
                             cMode = console_invert;
                             ConsoleState = uart_select;
                             break;
+                        case 'F':
+                            cMode = console_feed;
+                            ConsoleState = uart_select;
+                            break;
                         case 'b':
                             break;
                         case 'q':
@@ -321,7 +321,7 @@ void Console_Task(){
             
             case uart_select:
                 
-                printf("\rSelect WD: %i\n",elements);
+                printf("\rSelect WD: \n");
                 for(i = 0; i<elements;i++){
                     printf("%i -> %s \n",i,watchdog_names[i]);
                 }
@@ -346,11 +346,16 @@ void Console_Task(){
                 if (temp32 >= 0 && temp32 <= 32){  // Check if Input is within [0,32] else display Error
                     selected_subwatchdog = temp32;
                     printf("Unit %i selected\n", selected_subwatchdog);
-                    print_watchdog_config(selected_watchdog, selected_subwatchdog);
-                    if(cMode == console_config){
-                        demo_WD_config(selected_watchdog,selected_subwatchdog);
-                    }
-                    
+                    if(cMode != console_feed){
+                        print_watchdog_config(selected_watchdog, selected_subwatchdog);
+                        if(cMode == console_config){
+                            demo_WD_config(selected_watchdog,selected_subwatchdog);
+                        }
+                    }else{
+                        unlock(wd_space[selected_watchdog],watchdog_keys[selected_watchdog]);
+                        wd_space[selected_watchdog]->unit[selected_subwatchdog].feed = watchdog_food[selected_watchdog];
+                        printf("WD got food.");
+                    }                    
                     ConsoleState = uart_main; 
                 }else{
                     printf("Input %i out of Range. Type in a valid input otherwise use b or q to get back.\n", temp32);
@@ -367,12 +372,12 @@ void Console_Task(){
                     temp8 = char_to_uint(buffer,ans);
                     if (temp8 == 0 ){
                         printf("Channel %i won't be inverted\n", temp32);
-                        unlock(wd_space[selected_watchdog], WDKey_Mockaon);
+                        unlock(wd_space[selected_watchdog], watchdog_keys[selected_watchdog]);
                         nInvOutput(wd_space[selected_watchdog], temp32);
                         ConsoleState = uart_main; 
                     }else if(temp8 == 1){  
                         printf("Channel %i will be inverted\n", temp32);
-                        unlock(wd_space[selected_watchdog], WDKey_Mockaon);
+                        unlock(wd_space[selected_watchdog], watchdog_keys[selected_watchdog]);
                         InvOutput(wd_space[selected_watchdog], temp32);
                         ConsoleState = uart_main; 
                     }else{

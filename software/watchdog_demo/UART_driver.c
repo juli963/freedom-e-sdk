@@ -174,6 +174,9 @@ int UART_read_n(char * buffer, int max_chars, char terminator, int blocking)
     if (0 != UART_get_char(&buffer[i], blocking)) {
         break;
     }
+    if (((buffer[i] == 0x08) || (buffer[i] == 0x7F)) && (i >= 1)){  // Check for Backspace/Del and Array shouldn't get negative
+      i -= 2; // Delete Backspace and previous Char
+    }
     if ((buffer[i] == terminator) || (buffer[i] == 0)) {
       break;
     }
