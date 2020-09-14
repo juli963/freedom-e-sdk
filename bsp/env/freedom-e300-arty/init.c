@@ -11,7 +11,7 @@ extern void trap_entry();
 
 unsigned long get_cpu_freq()
 {
-  return 65000000;
+  return 32500000;
 }
 
 unsigned long get_timer_freq()
@@ -23,13 +23,13 @@ uint64_t get_timer_value()
 {
 #if __riscv_xlen == 32
   while (1) {
-    uint32_t hi = read_csr(mcycleh);
-    uint32_t lo = read_csr(mcycle);
-    if (hi == read_csr(mcycleh))
+    uint32_t hi =  *(volatile uint32_t *)(CLINT_CTRL_ADDR + CLINT_MTIME + 4);//read_csr(mcycleh); 
+    uint32_t lo = *(volatile unsigned long *)(CLINT_CTRL_ADDR + CLINT_MTIME);//read_csr(mcycle);
+    if (hi == *(volatile uint32_t *)(CLINT_CTRL_ADDR + CLINT_MTIME + 4))
       return ((uint64_t)hi << 32) | lo;
   }
 #else
-  return read_csr(mcycle);
+  return *(volatile unsigned long *)(CLINT_CTRL_ADDR + CLINT_MTIME);//read_csr(mcycle);
 #endif
 }
 

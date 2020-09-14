@@ -12,8 +12,8 @@ include $(extra_configs)
 endif
 
 # Default target
-BOARD ?= freedom-e300-hifive1
-PROGRAM ?= led-bmi160-demonstrator
+BOARD ?= freedom-e300-arty
+PROGRAM ?= watchdog_demo
 LINK_TARGET ?= flash
 GDB_PORT ?= 3333
 
