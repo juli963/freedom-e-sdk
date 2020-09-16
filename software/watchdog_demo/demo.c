@@ -36,13 +36,13 @@ void delay_ms(uint32_t period)
 }
 
 /* Create Watchdog Structs */
-volatile struct wd_unit *wd_space[] = {0x10000200};
+volatile struct wd_unit *wd_space[] = {0x10000200, 0x2000};
 
 enum Watchdog_Unit{WD_MockAON=0};
-const uint32_t watchdog_clocks[] = {32768/2}; // Check if lfClock is really half of 32,768kHz
-const uint32_t watchdog_food[] = {0xD09F00D};
-const uint32_t watchdog_keys[] = {0x51F15E};
-const char* watchdog_names[] = {"MockAON"};
+const uint32_t watchdog_clocks[] = {32768/2, 32768/2}; // Check if lfClock is really half of 32,768kHz
+const uint32_t watchdog_food[] = {0xD09F00D, 0xD09F00D};
+const uint32_t watchdog_keys[] = {0x51F15E, 0x51F15E};
+const char* watchdog_names[] = {"MockAON", "TLWDT"};
 // Wdog Mockaon CLK is lfclk -> nearly 32kHz
 
 // Register Map etc. https://sifive.cdn.prismic.io/sifive%2F500a69f8-af3a-4fd9-927f-10ca77077532_fe310-g000.pdf
