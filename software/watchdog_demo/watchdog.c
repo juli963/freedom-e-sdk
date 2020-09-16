@@ -119,8 +119,6 @@ void writeReg(enum WD_Register reg,uint32_t data, struct wd_element *sWD ){
 
 void configWatchdog(struct wd_element *sWD, struct wd_unit *sWD_global, uint8_t timer, uint32_t key){
 	unlock(sWD_global ,key);
-	printf("Key_ptr:%p\n",&sWD_global->global.key);
-	printf("Key_val:%p\n",sWD_global->global.key);
 	writeReg(wd_reg_ctrl_scale,sWD->cfg.field.scale,&(sWD_global->unit[timer]));
 	unlock(sWD_global ,key);
 	writeReg(wd_reg_ctrl_reserved0,sWD->cfg.field.rsv0,&(sWD_global->unit[timer]));
@@ -142,7 +140,6 @@ void configWatchdog(struct wd_element *sWD, struct wd_unit *sWD_global, uint8_t 
 	writeReg(wd_reg_ctrl_feed,sWD->feed,&(sWD_global->unit[timer]));
 	unlock(sWD_global ,key);
 	writeReg(wd_reg_ctrl_cmp_0,sWD->compare[0],&(sWD_global->unit[timer]));
-	printf("Compare_0: %lu \n",sWD_global->unit[timer].compare[0]);
 	unlock(sWD_global ,key);
 	writeReg(wd_reg_ctrl_cmp_1,sWD->compare[1],&(sWD_global->unit[timer]));
 	unlock(sWD_global ,key);

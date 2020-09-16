@@ -49,9 +49,9 @@ const char* watchdog_names[] = {"MockAON"};
 // Architecture https://sifive.cdn.prismic.io/sifive%2Ffeb6f967-ff96-418f-9af4-a7f3b7fd1dfc_fe310-g000-ds.pdf
 // Getting started Arty https://sifive.cdn.prismic.io/sifive%2Fed96de35-065f-474c-a432-9f6a364af9c8_sifive-e310-arty-gettingstarted-v1.0.6.pdf
 
-enum eStates {uart_main,uart_unit,uart_mode,uart_scale,uart_counter,uart_compare,uart_pulsewidth,uart_mux,uart_zero,uart_rsten,uart_always,uart_awake,uart_invert, uart_select};
+enum eStates {uart_main,uart_unit,uart_mode,uart_scale,uart_counter,uart_compare,uart_pulsewidth,uart_mux,uart_zero,uart_rsten,uart_always,uart_awake,uart_invert, uart_select, uart_live};
 enum eStates ConsoleState = uart_main;
-enum eConsoleModes {console_stat, console_feed, console_invert, console_config};
+enum eConsoleModes {console_stat, console_feed, console_invert, console_config, console_live};
 
 
 uint32_t char_to_uint(char *c, uint8_t len){
@@ -280,14 +280,15 @@ void Console_Task(){
                 printf("\n\
                 --------------------------------------\n\
                 --------------------------------------\n\
+                ------- Watchdog Demo Main Menue -----\n\
                 --------------------------------------\n\
                 --------------------------------------\n\
-                    Watchdog Demo Main Menue\n\
                     \n\
                     C - Config \n\
                     S - Status \n\
                     I - Invert Output \n\
                     F - Feed Watchdog\n\
+                    L - Live Status\n\
                     \n\
                     b - back to previous Menue\n\
                     q - back to Main Menue\n\
@@ -309,6 +310,10 @@ void Console_Task(){
                             break;
                         case 'F':
                             cMode = console_feed;
+                            ConsoleState = uart_select;
+                            break;
+                        case 'L':
+                            cMode = console_live;
                             ConsoleState = uart_select;
                             break;
                         case 'b':
@@ -346,22 +351,41 @@ void Console_Task(){
                 if (temp32 >= 0 && temp32 <= 32){  // Check if Input is within [0,32] else display Error
                     selected_subwatchdog = temp32;
                     printf("Unit %i selected\n", selected_subwatchdog);
-                    if(cMode != console_feed){
+                    if(cMode != console_feed && cMode != console_live){
                         print_watchdog_config(selected_watchdog, selected_subwatchdog);
                         if(cMode == console_config){
                             demo_WD_config(selected_watchdog,selected_subwatchdog);
                         }
+                    }else if(cMode == console_live){
+                        ConsoleState = uart_live; 
+                        printf("Press 'F' for Feeding Watchdog\n");
+                        break;
                     }else{
                         unlock(wd_space[selected_watchdog],watchdog_keys[selected_watchdog]);
                         wd_space[selected_watchdog]->unit[selected_subwatchdog].feed = watchdog_food[selected_watchdog];
                         printf("WD got food.");
                     }                    
                     ConsoleState = uart_main; 
+                    break;
                 }else{
                     printf("Input %i out of Range. Type in a valid input otherwise use b or q to get back.\n", temp32);
                 }
                 break;
 
+            case uart_live:
+                printf("\rScaled Counter Value: %6lu",(uint32_t)(wd_space[selected_watchdog]->unit[selected_subwatchdog].s & 0xFFFFFFFF));
+                ans = UART_read_n(buffer, 1, '\r', 0);
+                if (ans > 0){
+                    if (buffer[0] = 'F'){
+                        unlock(wd_space[selected_watchdog],watchdog_keys[selected_watchdog]);
+                        wd_space[selected_watchdog]->unit[selected_subwatchdog].feed = watchdog_food[selected_watchdog];
+                        printf("\n  WD got food.\n");
+                    }else if(buffer[0] = '\r'){
+                        printf('\n');
+                    }
+                }
+                delay_ms(100);
+                break;
             case uart_invert:
                 printf("Enter Channel to Invert -> Range 0-32\n");
                 ans = UART_read_n(buffer, 20, '\r', 1);
@@ -389,9 +413,12 @@ void Console_Task(){
                 break;
             
             default:
+                ConsoleState = uart_main; 
                 break;
         }
         if(c == 'q' || buffer[0] == 'q' || c == 'b' || buffer[0] == 'b'){
+            c = 0;
+            buffer[0] = 0;
             ConsoleState = uart_main;
         }   
     }
