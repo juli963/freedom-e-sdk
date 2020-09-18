@@ -117,42 +117,42 @@ void writeReg(enum WD_Register reg,uint32_t data, struct wd_element *sWD ){
 	};
 };
 
-void configWatchdog(struct wd_element *sWD, struct wd_unit *sWD_global, uint8_t timer, uint32_t key){
-	unlock(sWD_global ,key);
+void configWatchdog(struct wd_element *sWD, struct wd_unit *sWD_global, uint8_t timer, struct wd_settings *setting){
+	unlock(sWD_global ,setting);
 	writeReg(wd_reg_ctrl_scale,sWD->cfg.field.scale,&(sWD_global->unit[timer]));
-	unlock(sWD_global ,key);
+	unlock(sWD_global ,setting);
 	writeReg(wd_reg_ctrl_reserved0,sWD->cfg.field.rsv0,&(sWD_global->unit[timer]));
-	unlock(sWD_global ,key);
+	unlock(sWD_global ,setting);
 	writeReg(wd_reg_ctrl_zerocmp,sWD->cfg.field.zerocmp,&(sWD_global->unit[timer]));
-	unlock(sWD_global ,key);
+	unlock(sWD_global ,setting);
 	writeReg(wd_reg_ctrl_deglitch,sWD->cfg.field.mode,&(sWD_global->unit[timer]));
-	unlock(sWD_global ,key);
+	unlock(sWD_global ,setting);
     writeReg(wd_reg_ctrl_reserved1,sWD->cfg.field.rsv1,&(sWD_global->unit[timer]));
-	unlock(sWD_global ,key);
+	unlock(sWD_global ,setting);
 	writeReg(wd_reg_ctrl_reserved2,sWD->cfg.field.rsv2,&(sWD_global->unit[timer]));
-	unlock(sWD_global ,key);
+	unlock(sWD_global ,setting);
 	writeReg(wd_reg_ctrl_countLo,(sWD->count&0xFFFFFFFF),&(sWD_global->unit[timer]));
-	unlock(sWD_global ,key);
+	unlock(sWD_global ,setting);
 	writeReg(wd_reg_ctrl_countHi,((sWD->count&0xFFFFFFFF00000000)>>32),&(sWD_global->unit[timer]));
-	unlock(sWD_global ,key);
+	unlock(sWD_global ,setting);
 	writeReg(wd_reg_ctrl_s,sWD->s,&(sWD_global->unit[timer]));
-	unlock(sWD_global ,key);
+	unlock(sWD_global ,setting);
 	writeReg(wd_reg_ctrl_feed,sWD->feed,&(sWD_global->unit[timer]));
-	unlock(sWD_global ,key);
+	unlock(sWD_global ,setting);
 	writeReg(wd_reg_ctrl_cmp_0,sWD->compare[0],&(sWD_global->unit[timer]));
-	unlock(sWD_global ,key);
+	unlock(sWD_global ,setting);
 	writeReg(wd_reg_ctrl_cmp_1,sWD->compare[1],&(sWD_global->unit[timer]));
-	unlock(sWD_global ,key);
+	unlock(sWD_global ,setting);
 	writeReg(wd_reg_ctrl_ip_0,sWD->cfg.field.interrupt,&(sWD_global->unit[timer]));
-	unlock(sWD_global ,key);
+	unlock(sWD_global ,setting);
 	writeReg(wd_reg_ctrl_mux,sWD->mux,&(sWD_global->unit[timer]));
-	unlock(sWD_global ,key);
+	unlock(sWD_global ,setting);
 	writeReg(wd_reg_ctrl_pulsewidth,sWD->pulsewidth,&(sWD_global->unit[timer]));
-	unlock(sWD_global ,key);
+	unlock(sWD_global ,setting);
 	writeReg(wd_reg_ctrl_sticky,sWD->cfg.field.outputen,&(sWD_global->unit[timer]));
-    unlock(sWD_global ,key);
+    unlock(sWD_global ,setting);
 	writeReg(wd_reg_ctrl_countAlways,sWD->cfg.field.enalways,&(sWD_global->unit[timer]));
-    unlock(sWD_global ,key);
+    unlock(sWD_global ,setting);
 	writeReg(wd_reg_ctrl_running,sWD->cfg.field.encoreawake,&(sWD_global->unit[timer]));
 }
 
@@ -177,10 +177,24 @@ void updateStruct(struct wd_element *sWD, struct wd_unit *sWD_global, uint8_t ti
 
 }
 
-void unlock(struct wd_unit *sWD, uint32_t key){
-	sWD->global.key = key;
+void unlock(struct wd_unit *sWD, struct wd_settings *setting){
+	sWD->global.key = setting->key;
 	for(uint32_t i = 0; i<500; i++){	// Add a little idle time before writing next Register
 		asm("NOP");
+	}
+	if(setting->prbs){
+		uint32_t init = setting->key;
+		uint32_t poly = setting->polynom;
+		uint8_t bit = 0;
+		for(uint8_t i = 0; i<32; i++){
+			if ((poly & (1<<0)) > 0){
+				bit ^= init;
+			}
+			init >>= 1;
+			poly >>= 1;
+		}
+		bit &= 0x01;
+		setting->key = (setting->key << 1) | bit;
 	}
 }
 
@@ -188,12 +202,12 @@ void lock(struct wd_unit *sWD){
 	sWD->global.key = 0;
 }
 
-void disableWatchdog(struct wd_unit *sWD, uint8_t timer, uint32_t key){
-    unlock(sWD ,key);
+void disableWatchdog(struct wd_unit *sWD, uint8_t timer, struct wd_settings *setting){
+    unlock(sWD ,setting);
     writeReg(wd_reg_ctrl_sticky,0,&(sWD->unit[timer]));
-    unlock(sWD ,key);
+    unlock(sWD ,setting);
 	writeReg(wd_reg_ctrl_countAlways,0,&(sWD->unit[timer]));
-    unlock(sWD ,key);
+    unlock(sWD ,setting);
 	writeReg(wd_reg_ctrl_running,0,&(sWD->unit[timer]));
 }
 

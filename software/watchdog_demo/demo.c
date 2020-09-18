@@ -36,13 +36,21 @@ void delay_ms(uint32_t period)
 }
 
 /* Create Watchdog Structs */
-volatile struct wd_unit *wd_space[] = {0x10000200, 0x2000};
+//volatile struct wd_unit *wd_space[] = {0x10000200, 0x2000, 0x4000};
 
-enum Watchdog_Unit{WD_MockAON=0};
-const uint32_t watchdog_clocks[] = {32768/2, 32768/2}; // Check if lfClock is really half of 32,768kHz
-const uint32_t watchdog_food[] = {0xD09F00D, 0xD09F00D};
-const uint32_t watchdog_keys[] = {0x51F15E, 0x51F15E};
-const char* watchdog_names[] = {"MockAON", "TLWDT"};
+struct wd_settings wd_setting[] = {
+                                    {0x10000200, 32768/2, 0xD09F00D, 0x51F15E, 0, 0, "MockAON"},
+                                    {0x2000, 32768/2, 0xD09F00D, 0x51F15E, 0, 0, "TLWDT"},
+                                    {0x4000, 32768/2, 0xD09F00D, 0x51F15E, 1, 0x48000000, "AXI4WDT"}
+                                    };
+
+//const uint32_t watchdog_clocks[] = {32768/2, 32768/2, 32768/2}; // Check if lfClock is really half of 32,768kHz
+//const uint32_t watchdog_food[] = {0xD09F00D, 0xD09F00D, 0xD09F00D};
+//uint32_t watchdog_keys[] = {0x51F15E, 0x51F15E, 0x51F15E};
+//uint8_t watchdog_PRBS[] = {0, 0, 1};
+//const uint32_t watchdog_Polynom[] = {0, 0, 0x48000000};
+//const char* watchdog_names[] = {"MockAON", "TLWDT", "AXI4WDT"};
+
 // Wdog Mockaon CLK is lfclk -> nearly 32kHz
 
 // Register Map etc. https://sifive.cdn.prismic.io/sifive%2F500a69f8-af3a-4fd9-927f-10ca77077532_fe310-g000.pdf
@@ -83,8 +91,8 @@ void print_watchdog_times(uint32_t clock,uint8_t mode, uint8_t scale, uint64_t c
     printf("Pulsetime: %f s \n", t_period*(float)pulsewidth);
 }
 
-void print_watchdog_config(enum Watchdog_Unit unit, uint8_t subunit){
-    printf("Watchdog Configuration %s Unit: %i \n",watchdog_names[unit],subunit);
+void print_watchdog_config(uint8_t unit, uint8_t subunit){
+    printf("Watchdog Configuration %s Unit: %i \n",wd_setting[unit].name,subunit);
     printf("    Inv: %i\n\
     Modus: %i\n\
     Scale: 2^%i\n\
@@ -100,25 +108,25 @@ void print_watchdog_config(enum Watchdog_Unit unit, uint8_t subunit){
     Pulsewidth: %lu\n\
     Mux: %lu\n\
     ",\
-    wd_space[unit]->global.inv,\
-    wd_space[unit]->unit[subunit].cfg.field.mode,\
-    wd_space[unit]->unit[subunit].cfg.field.scale,\
-    wd_space[unit]->unit[subunit].cfg.field.zerocmp,\
-    wd_space[unit]->unit[subunit].cfg.field.outputen,\
-    wd_space[unit]->unit[subunit].cfg.field.enalways,\
-    wd_space[unit]->unit[subunit].cfg.field.encoreawake,\
-    (uint32_t)((wd_space[unit]->unit[subunit].count & 0xFFFFFFFF00000000)>>32),\
-    (uint32_t)(wd_space[unit]->unit[subunit].count & 0xFFFFFFFF),\
-    (uint32_t)(wd_space[unit]->unit[subunit].s & 0xFFFFFFFF),/* Only lower 32 Bits */ \  
-    wd_space[unit]->unit[subunit].compare[0],\
-    wd_space[unit]->unit[subunit].compare[1],\
-    wd_space[unit]->unit[subunit].pulsewidth,\
-    wd_space[unit]->unit[subunit].mux \
+    wd_setting[unit].address->global.inv,\
+    wd_setting[unit].address->unit[subunit].cfg.field.mode,\
+    wd_setting[unit].address->unit[subunit].cfg.field.scale,\
+    wd_setting[unit].address->unit[subunit].cfg.field.zerocmp,\
+    wd_setting[unit].address->unit[subunit].cfg.field.outputen,\
+    wd_setting[unit].address->unit[subunit].cfg.field.enalways,\
+    wd_setting[unit].address->unit[subunit].cfg.field.encoreawake,\
+    (uint32_t)((wd_setting[unit].address->unit[subunit].count & 0xFFFFFFFF00000000)>>32),\
+    (uint32_t)(wd_setting[unit].address->unit[subunit].count & 0xFFFFFFFF),\
+    (uint32_t)(wd_setting[unit].address->unit[subunit].s & 0xFFFFFFFF),/* Only lower 32 Bits */ \  
+    wd_setting[unit].address->unit[subunit].compare[0],\
+    wd_setting[unit].address->unit[subunit].compare[1],\
+    wd_setting[unit].address->unit[subunit].pulsewidth,\
+    wd_setting[unit].address->unit[subunit].mux \
     );
-    print_watchdog_times(watchdog_clocks[unit], wd_space[unit]->unit[subunit].cfg.field.mode, wd_space[unit]->unit[subunit].cfg.field.scale, wd_space[unit]->unit[subunit].count, wd_space[unit]->unit[subunit].compare[0], wd_space[unit]->unit[subunit].compare[1], wd_space[unit]->unit[subunit].pulsewidth);
+    print_watchdog_times(wd_setting[unit].clock, wd_setting[unit].address->unit[subunit].cfg.field.mode, wd_setting[unit].address->unit[subunit].cfg.field.scale, wd_setting[unit].address->unit[subunit].count, wd_setting[unit].address->unit[subunit].compare[0], wd_setting[unit].address->unit[subunit].compare[1], wd_setting[unit].address->unit[subunit].pulsewidth);
 }
 
-void demo_WD_config(enum Watchdog_Unit selected_watchdog,uint8_t selected_subwatchdog){
+void demo_WD_config(uint8_t selected_watchdog,uint8_t selected_subwatchdog){
     enum eStates State = uart_mode;
     struct wd_element temp_watchdog;
     char c;
@@ -187,7 +195,7 @@ void demo_WD_config(enum Watchdog_Unit selected_watchdog,uint8_t selected_subwat
                 if (temp32 <= 0xFFFF){  
                     temp_watchdog.pulsewidth = temp32;
                     printf("Pulsewidth Value: %i\n", temp_watchdog.pulsewidth);
-                    print_watchdog_times(watchdog_clocks[selected_watchdog],temp_watchdog.cfg.field.mode, temp_watchdog.cfg.field.scale, temp_watchdog.count, temp_watchdog.compare[0], temp_watchdog.compare[1], temp_watchdog.pulsewidth );
+                    print_watchdog_times(wd_setting[selected_watchdog].clock,temp_watchdog.cfg.field.mode, temp_watchdog.cfg.field.scale, temp_watchdog.count, temp_watchdog.compare[0], temp_watchdog.compare[1], temp_watchdog.pulsewidth );
                     State = uart_mux; 
                 }else{
                     printf("Input %i out of Range. Type in a valid input otherwise use b or q to get back.\n", temp32);
@@ -244,7 +252,7 @@ void demo_WD_config(enum Watchdog_Unit selected_watchdog,uint8_t selected_subwat
                 if (temp32 >= 0 && temp32 <= 1){  // Check if Input is within [0,1] else display Error
                     temp_watchdog.cfg.field.encoreawake = temp32;
                     printf("CoreAwake Value: %i\n", temp_watchdog.cfg.field.encoreawake);
-                    configWatchdog(&temp_watchdog, wd_space[selected_watchdog], selected_subwatchdog, watchdog_keys[selected_watchdog]);
+                    configWatchdog(&temp_watchdog, wd_setting[selected_watchdog].address, selected_subwatchdog, &wd_setting[selected_watchdog]);
                     print_watchdog_config(selected_watchdog, selected_subwatchdog);
                     return;
                 }else{
@@ -263,7 +271,7 @@ void demo_WD_config(enum Watchdog_Unit selected_watchdog,uint8_t selected_subwat
 
 void Console_Task(){
     struct wd_element temp_watchdog;
-    enum Watchdog_Unit selected_watchdog = 0;
+    uint8_t selected_watchdog = 0;
     uint8_t selected_subwatchdog = 0;
     char c;
     char buffer[20];
@@ -271,7 +279,7 @@ void Console_Task(){
     uint8_t temp8,ans;
     enum eConsoleModes cMode = console_stat;
 
-    uint8_t elements = (sizeof(watchdog_clocks)/sizeof(watchdog_clocks[0]));
+    uint8_t elements = (sizeof(wd_setting)/sizeof(wd_setting[0]));
     uint8_t i = 0;
     while(1){
         switch (ConsoleState)
@@ -328,13 +336,13 @@ void Console_Task(){
                 
                 printf("\rSelect WD: \n");
                 for(i = 0; i<elements;i++){
-                    printf("%i -> %s \n",i,watchdog_names[i]);
+                    printf("%i -> %s \n",i,wd_setting[i].name);
                 }
                 ans = UART_read_n(buffer, 20, '\r', 1);
                 temp32 = char_to_uint(buffer,ans);
                 if (temp32 >= 0 && temp32 <= elements){  
                     selected_watchdog = temp32; 
-                     printf("Watchdog %s selected\n", watchdog_names[selected_watchdog]);
+                     printf("Watchdog %s selected\n", wd_setting[selected_watchdog].name);
                      if (cMode != console_invert){
                          ConsoleState = uart_unit; 
                      }else{
@@ -361,8 +369,8 @@ void Console_Task(){
                         printf("Press 'F' for Feeding Watchdog\n");
                         break;
                     }else{
-                        unlock(wd_space[selected_watchdog],watchdog_keys[selected_watchdog]);
-                        wd_space[selected_watchdog]->unit[selected_subwatchdog].feed = watchdog_food[selected_watchdog];
+                        unlock(wd_setting[selected_watchdog].address,&wd_setting[selected_watchdog]);
+                        wd_setting[selected_watchdog].address->unit[selected_subwatchdog].feed = wd_setting[selected_watchdog].food;
                         printf("WD got food.");
                     }                    
                     ConsoleState = uart_main; 
@@ -373,14 +381,14 @@ void Console_Task(){
                 break;
 
             case uart_live:
-                printf("\rScaled Counter Value: %6lu",(uint32_t)(wd_space[selected_watchdog]->unit[selected_subwatchdog].s & 0xFFFFFFFF));
+                printf("\rScaled Counter Value: %6lu",(uint32_t)(wd_setting[selected_watchdog].address->unit[selected_subwatchdog].s & 0xFFFFFFFF));
                 ans = UART_read_n(buffer, 1, '\r', 0);
                 if (ans > 0){
-                    if (buffer[0] = 'F'){
-                        unlock(wd_space[selected_watchdog],watchdog_keys[selected_watchdog]);
-                        wd_space[selected_watchdog]->unit[selected_subwatchdog].feed = watchdog_food[selected_watchdog];
+                    if (buffer[0] == 'F'){
+                        unlock(wd_setting[selected_watchdog].address,&wd_setting[selected_watchdog]);
+                        wd_setting[selected_watchdog].address->unit[selected_subwatchdog].feed = wd_setting[selected_watchdog].food;
                         printf("\n  WD got food.\n");
-                    }else if(buffer[0] = '\r'){
+                    }else if(buffer[0] == '\r'){
                         printf('\n');
                     }
                 }
@@ -396,13 +404,13 @@ void Console_Task(){
                     temp8 = char_to_uint(buffer,ans);
                     if (temp8 == 0 ){
                         printf("Channel %i won't be inverted\n", temp32);
-                        unlock(wd_space[selected_watchdog], watchdog_keys[selected_watchdog]);
-                        nInvOutput(wd_space[selected_watchdog], temp32);
+                        unlock(wd_setting[selected_watchdog].address, &wd_setting[selected_watchdog]);
+                        nInvOutput(wd_setting[selected_watchdog].address, temp32);
                         ConsoleState = uart_main; 
                     }else if(temp8 == 1){  
                         printf("Channel %i will be inverted\n", temp32);
-                        unlock(wd_space[selected_watchdog], watchdog_keys[selected_watchdog]);
-                        InvOutput(wd_space[selected_watchdog], temp32);
+                        unlock(wd_setting[selected_watchdog].address, &wd_setting[selected_watchdog]);
+                        InvOutput(wd_setting[selected_watchdog].address, temp32);
                         ConsoleState = uart_main; 
                     }else{
                         printf("Input %i out of Range. Type in a valid input otherwise use b or q to get back.\n", temp8);
@@ -438,6 +446,7 @@ int main(int unit)
 
     char *msg = "Hello World\r\n";
     printf("core freq at %d Hz\n", get_cpu_freq());
+    printf("Elements: %i \n", sizeof(wd_setting)/sizeof(wd_setting[0]));
 
     // Set IO Function to WD Periph 1 and 2
     GPIO_REG(GPIO_IOF_SEL)    &= ~(1<<19);

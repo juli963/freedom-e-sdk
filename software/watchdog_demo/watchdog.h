@@ -50,6 +50,7 @@ struct wd_global {
 	uint32_t key;
 	uint32_t inv;
 };
+
 struct wd_element {
     wd_config cfg;
     uint64_t count;
@@ -66,13 +67,24 @@ struct wd_unit{
     struct wd_element unit[];
 };
 
+struct wd_settings{
+    struct wd_unit *address;
+    uint32_t clock;
+    uint32_t food;
+    uint32_t key;
+    uint8_t prbs;
+    uint32_t polynom;
+    char* name;
+};
+
+
 uint32_t readReg(enum WD_Register reg, struct wd_element *sWD);
 void writeReg(enum WD_Register reg,uint32_t data, struct wd_element *sWD );
-void configWatchdog(struct wd_element *sWD, struct wd_unit *sWD_global, uint8_t timer, uint32_t key);
+void configWatchdog(struct wd_element *sWD, struct wd_unit *sWD_global, uint8_t timer, struct wd_settings *setting);
 void updateStruct(struct wd_element *sWD, struct wd_unit *sWD_global, uint8_t timer);
-void unlock(struct wd_unit *sWD, uint32_t key);
+void unlock(struct wd_unit *sWD, struct wd_settings *setting);
 void lock(struct wd_unit *sWD);
-void disableWatchdog(struct wd_unit *sWD, uint8_t timer, uint32_t key);
+void disableWatchdog(struct wd_unit *sWD, uint8_t timer, struct wd_settings *setting);
 uint8_t readInterrupt(struct wd_unit *sWD, uint8_t timer);
 void SetOutput(struct wd_unit *sWD, uint8_t timer, uint32_t channel);
 void ResetOutput(struct wd_unit *sWD, uint8_t timer, uint32_t channel);
