@@ -103,12 +103,14 @@ void writeReg(enum WD_Register reg,uint32_t data, struct wd_element *sWD ){
             sWD->count = ((sWD->count)&0xFFFFFFFF00000000) | data;
 			break;
 		case wd_reg_ctrl_countHi: 
-		    sWD->count = ((sWD->count)&0xFFFFFFFF ) | (data<<32);
+		    sWD->count = ((sWD->count)&0xFFFFFFFF ) | ((uint64_t)data<<32);
 			break;
 		case wd_reg_ctrl_feed: 
             sWD->feed = data;
+			break;
 		case wd_reg_ctrl_mux: 
             sWD->mux = data;
+			break;
 		case wd_reg_ctrl_pulsewidth: 
             sWD->pulsewidth = data;
 			break;
@@ -154,27 +156,11 @@ void configWatchdog(struct wd_element *sWD, struct wd_unit *sWD_global, uint8_t 
 	writeReg(wd_reg_ctrl_countAlways,sWD->cfg.field.enalways,&(sWD_global->unit[timer]));
     unlock(sWD_global ,setting);
 	writeReg(wd_reg_ctrl_running,sWD->cfg.field.encoreawake,&(sWD_global->unit[timer]));
+	
 }
 
 void updateStruct(struct wd_element *sWD, struct wd_unit *sWD_global, uint8_t timer){
-	/*sWD->cfg.field.scale = readReg(wd_reg_ctrl_scale,timer);
-	sWD->cfg.field.rsv0 = readReg(wd_reg_ctrl_reserved0,timer);
-	sWD->cfg.field.rsv1 = readReg(wd_reg_ctrl_reserved1,timer);
-	sWD->cfg.field.zerocmp = readReg(wd_reg_ctrl_zerocmp,timer);
-	sWD->cfg.field.mode = readReg(wd_reg_ctrl_deglitch,timer);
-	sWD->cfg.field.enalways = readReg(wd_reg_ctrl_countAlways,timer);
-	sWD->cfg.field.encoreawake = readReg(wd_reg_ctrl_running,timer);
-	sWD->cfg.field.rsv2 = readReg(wd_reg_ctrl_reserved2,timer);
-	sWD->cfg.field.interrupt = readReg(wd_reg_ctrl_ip_0,timer);
-	sWD->count = readReg(wd_reg_ctrl_countLo,timer);
-	sWD->count |= readReg(wd_reg_ctrl_countHi,timer)<<32;
-	sWD->s = readReg(wd_reg_ctrl_s,timer);
-	sWD->feed = readReg(wd_reg_ctrl_feed,timer);
-	sWD->compare[0] = readReg(wd_reg_ctrl_cmp_0,timer);
-	sWD->compare[1] = readReg(wd_reg_ctrl_cmp_1,timer);
-	sWD->cfg.field.en = readReg(wd_reg_ctrl_sticky,timer);*/
     *(sWD) = sWD_global->unit[timer];
-
 }
 
 void unlock(struct wd_unit *sWD, struct wd_settings *setting){

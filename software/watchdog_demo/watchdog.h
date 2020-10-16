@@ -67,9 +67,15 @@ struct wd_unit{
     struct wd_element unit[];
 };
 
+struct wd_ints{
+    uint8_t channels[32];
+};
+
 struct wd_settings{
     struct wd_unit *address;
     uint32_t clock;
+    const uint8_t num_ints;
+    const struct wd_ints *ints;
     uint32_t food;
     uint32_t key;
     uint8_t prbs;

@@ -21,14 +21,16 @@
 #include <unistd.h>
 #include "platform.h"
 #include "encoding.h"
+#include "plic/plic_driver.h"
 #include "common.h"
 #include "UART_driver.h"
 #include "watchdog.h"
 
 asm (".global _printf_float");
 
-/* this is global as this address is set up to be faulty */
+#define NUM_Interrupts 59
 
+/* this is global as this address is set up to be faulty */
 void delay_ms(uint32_t period)
 {
     uint64_t end = (period >> 1) + get_timer_value();
@@ -36,22 +38,19 @@ void delay_ms(uint32_t period)
 }
 
 /* Create Watchdog Structs */
-//volatile struct wd_unit *wd_space[] = {0x10000200, 0x2000, 0x4000};
+const struct wd_ints wd_interrupts[] = {
+    {1},
+    {53,54,55},
+    {56},
+    {57,58,59}
+};
 
 struct wd_settings wd_setting[] = {
-                                    {0x10000200, 32768/2, 0xD09F00D, 0x51F15E, 0, 0, "MockAON"},
-                                    {0x2000, 32768/2, 0xD09F00D, 0x51F15E, 0, 0, "TLWDT"},
-                                    {0x4000, 32768/2, 0xD09F00D, 0x51F15E, 1, 0x48000000, "AXI4WDT"}
+                                    {(struct wd_unit*) 0x10000200, 16384, 1, &wd_interrupts[0], 0xD09F00D, 0x51F15E, 0, 0, "MockAON_timeout"},
+                                    {(struct wd_unit*) 0x2000, 32500000, 3, &wd_interrupts[1], 0xD09F00D, 0x51F15E, 1, 0x48000000, "TLWDT_0_both"},
+                                    {(struct wd_unit*) 0x4000, 16384, 1, &wd_interrupts[2], 0xD09F00D, 0x51F15E, 0, 0, "TLWDT_1_timeout"},
+                                    {(struct wd_unit*) 0x6000, 16384, 3, &wd_interrupts[3], 0xD09F00D, 0x51F15E, 0, 0, "AXI4WDT_2_window"}
                                     };
-
-//const uint32_t watchdog_clocks[] = {32768/2, 32768/2, 32768/2}; // Check if lfClock is really half of 32,768kHz
-//const uint32_t watchdog_food[] = {0xD09F00D, 0xD09F00D, 0xD09F00D};
-//uint32_t watchdog_keys[] = {0x51F15E, 0x51F15E, 0x51F15E};
-//uint8_t watchdog_PRBS[] = {0, 0, 1};
-//const uint32_t watchdog_Polynom[] = {0, 0, 0x48000000};
-//const char* watchdog_names[] = {"MockAON", "TLWDT", "AXI4WDT"};
-
-// Wdog Mockaon CLK is lfclk -> nearly 32kHz
 
 // Register Map etc. https://sifive.cdn.prismic.io/sifive%2F500a69f8-af3a-4fd9-927f-10ca77077532_fe310-g000.pdf
 // Architecture https://sifive.cdn.prismic.io/sifive%2Ffeb6f967-ff96-418f-9af4-a7f3b7fd1dfc_fe310-g000-ds.pdf
@@ -61,6 +60,10 @@ enum eStates {uart_main,uart_unit,uart_mode,uart_scale,uart_counter,uart_compare
 enum eStates ConsoleState = uart_main;
 enum eConsoleModes {console_stat, console_feed, console_invert, console_config, console_live};
 
+typedef void (*function_ptr_t) (void);
+void no_interrupt_handler (void) {}
+function_ptr_t g_ext_interrupt_handlers[NUM_Interrupts];
+plic_instance_t g_plic;
 
 uint32_t char_to_uint(char *c, uint8_t len){
     uint32_t result = 0;
@@ -100,6 +103,7 @@ void print_watchdog_config(uint8_t unit, uint8_t subunit){
     RstEn: %i\n\
     AlwaysEn: %i\n\
     CoreAwakeEn: %i\n\
+    Interrupt: %i\n\
     CounterHi: %lu\n\
     CounterLo: %lu\n\
     Scaled Counter: %lu\n\
@@ -115,9 +119,10 @@ void print_watchdog_config(uint8_t unit, uint8_t subunit){
     wd_setting[unit].address->unit[subunit].cfg.field.outputen,\
     wd_setting[unit].address->unit[subunit].cfg.field.enalways,\
     wd_setting[unit].address->unit[subunit].cfg.field.encoreawake,\
+    wd_setting[unit].address->unit[subunit].cfg.field.interrupt,\
     (uint32_t)((wd_setting[unit].address->unit[subunit].count & 0xFFFFFFFF00000000)>>32),\
     (uint32_t)(wd_setting[unit].address->unit[subunit].count & 0xFFFFFFFF),\
-    (uint32_t)(wd_setting[unit].address->unit[subunit].s & 0xFFFFFFFF),/* Only lower 32 Bits */ \  
+    (uint32_t)(wd_setting[unit].address->unit[subunit].s & 0xFFFFFFFF),/* Only lower 32 Bits */\  
     wd_setting[unit].address->unit[subunit].compare[0],\
     wd_setting[unit].address->unit[subunit].compare[1],\
     wd_setting[unit].address->unit[subunit].pulsewidth,\
@@ -165,7 +170,7 @@ void demo_WD_config(uint8_t selected_watchdog,uint8_t selected_subwatchdog){
                 printf("Enter Counter Value -> 32 Bit Range \n");
                 ans = UART_read_n(buffer, 20, '\r', 1);
                 temp32 = char_to_uint(buffer,ans);
-                printf("temp: %i\n",temp32);
+                printf("Counter Value: %i\n",temp32);
                 temp_watchdog.count = (uint64_t)temp32;
                 printf("CounterHi Value: %lu\n",(uint32_t)((temp_watchdog.count&0xFFFFFFFF00000000)>>32) );
                 printf("CounterLo Value: %lu\n",(uint32_t)(temp_watchdog.count&0xFFFFFFFF) );
@@ -252,6 +257,7 @@ void demo_WD_config(uint8_t selected_watchdog,uint8_t selected_subwatchdog){
                 if (temp32 >= 0 && temp32 <= 1){  // Check if Input is within [0,1] else display Error
                     temp_watchdog.cfg.field.encoreawake = temp32;
                     printf("CoreAwake Value: %i\n", temp_watchdog.cfg.field.encoreawake);
+                    temp_watchdog.cfg.field.interrupt = 0;
                     configWatchdog(&temp_watchdog, wd_setting[selected_watchdog].address, selected_subwatchdog, &wd_setting[selected_watchdog]);
                     print_watchdog_config(selected_watchdog, selected_subwatchdog);
                     return;
@@ -265,7 +271,16 @@ void demo_WD_config(uint8_t selected_watchdog,uint8_t selected_subwatchdog){
         if(c == 'q' || buffer[0] == 'q'){
             return;
         }
-        
+        if(c == 'b' || buffer[0] == 'b'){
+            c = 0;
+            buffer[0] = 0;
+            if (State == uart_mode){
+                return;
+            }else{
+                State--;
+            }
+            return;
+        }
     }
 }
 
@@ -342,7 +357,14 @@ void Console_Task(){
                 temp32 = char_to_uint(buffer,ans);
                 if (temp32 >= 0 && temp32 <= elements){  
                     selected_watchdog = temp32; 
-                     printf("Watchdog %s selected\n", wd_setting[selected_watchdog].name);
+                     printf("Watchdog %s selected, Interrupt Channels=(", wd_setting[selected_watchdog].name);
+                     for(i = 0; i < wd_setting[selected_watchdog].num_ints; i++){
+                         if(i != 0){
+                             printf(",");
+                         }
+                         printf("%i", wd_setting[selected_watchdog].ints->channels[i]);
+                     }
+                     printf(") \n");
                      if (cMode != console_invert){
                          ConsoleState = uart_unit; 
                      }else{
@@ -389,7 +411,7 @@ void Console_Task(){
                         wd_setting[selected_watchdog].address->unit[selected_subwatchdog].feed = wd_setting[selected_watchdog].food;
                         printf("\n  WD got food.\n");
                     }else if(buffer[0] == '\r'){
-                        printf('\n');
+                        printf("\n");
                     }
                 }
                 delay_ms(100);
@@ -432,59 +454,127 @@ void Console_Task(){
     }
 }
 
+void handle_m_ext_interrupt(){
+    for(int i = 0;i< sizeof(wd_setting)/sizeof(wd_setting[0]);i++){
+        for(int x = 0; x < wd_setting[i].num_ints; x++ ){
+            unlock(wd_setting[i].address, &wd_setting[i]);
+            writeReg(wd_reg_ctrl_ip_0,0, &wd_setting[i].address->unit[x] );
+            unlock(wd_setting[i].address, &wd_setting[i]);
+            writeReg(wd_reg_ctrl_running,0, &wd_setting[i].address->unit[x] );
+            unlock(wd_setting[i].address, &wd_setting[i]);
+            writeReg(wd_reg_ctrl_countAlways,0, &wd_setting[i].address->unit[x] );
+        }
+    }
+    //printf("Interrupts\n");
+  plic_source int_num  = PLIC_claim_interrupt(&g_plic);
+  PLIC_complete_interrupt(&g_plic, int_num);
+  //printf("Interrupt Source %i\n", int_num);
+
+  /*plic_source int_num  = PLIC_claim_interrupt(&g_plic);
+  printf("Interrupt Source %i\n", int_num);
+  if ((int_num >=1 ) && (int_num < NUM_Interrupts)) {
+    g_ext_interrupt_handlers[int_num]();
+  }else {
+    ;//exit(1 + (uintptr_t) int_num);
+  }
+  
+  
+  */
+}
 
 
-int main(int unit)
+extern uintptr_t handle_trap(uintptr_t mcause, uintptr_t epc);
+//volatile static void trap_entry(void){
+  //  clear_csr(mstatus, MSTATUS_MIE);
+  //  clear_csr(mie, MIP_MEIP);
+  //  clear_csr(mie, MIP_MTIP);
+    //printf("Interrupts\n");
+    /*for(int i = 0;i< sizeof(wd_setting)/sizeof(wd_setting[0]);i++){
+        for(int x = 0; x < wd_setting[i].num_ints; x++ ){
+            unlock(wd_setting[i].address, &wd_setting[i]);
+            writeReg(wd_reg_ctrl_ip_0,0, &wd_setting[i].address->unit[x] );
+            unlock(wd_setting[i].address, &wd_setting[i]);
+            writeReg(wd_reg_ctrl_running,0, &wd_setting[i].address->unit[x] );
+            unlock(wd_setting[i].address, &wd_setting[i]);
+            writeReg(wd_reg_ctrl_countAlways,0, &wd_setting[i].address->unit[x] );
+        }
+    }*/
+    //printf("Interrupts\n");
+ //   uint32_t cause = read_csr(mcause);
+  //  if ((cause & MCAUSE_INT) && ((cause & MCAUSE_CAUSE) == IRQ_M_EXT)) {
+ //       handle_m_ext_interrupt();
+ //   }else{
+ //       return;
+ //   }
+    //handle_trap(cause, 0);
+//}
+extern void trap_entry();
+void init_plic(void)
 {
-    GPIO_REG(GPIO_OUTPUT_EN) |= (1<<11);
-    GPIO_REG(GPIO_INPUT_EN) &= ~(1<<11);
-    GPIO_REG(GPIO_OUTPUT_EN) |= (1<<12);
-    GPIO_REG(GPIO_INPUT_EN) &= ~(1<<12);
-    GPIO_REG(GPIO_OUTPUT_EN) |= (1<<13);
-    GPIO_REG(GPIO_INPUT_EN) &= ~(1<<13);
+    printf("mtvec: 0x%X \n", read_csr(mtvec));
+    write_csr(mtvec, &trap_entry);
+    
+    PLIC_init(&g_plic, PLIC_CTRL_ADDR, NUM_Interrupts,
+              PLIC_NUM_PRIORITIES);
+
+    clear_csr(mie, MIP_MEIP);
+    clear_csr(mie, MIP_MTIP);
+
+    // Have to enable the interrupt both at the GPIO level,
+    // and at the PLIC level.
+    PLIC_enable_interrupt (&g_plic, 56);
+
+    // Priority must be set > 0 to trigger the interrupt.
+    PLIC_set_priority(&g_plic, 56, 1);
+
+    // Enable the Machine-External bit in MIE
+    set_csr(mie, MIP_MEIP);
+    // Enable interrupts in general.
+    set_csr(mstatus, MSTATUS_MIE);
+    //write_csr(mstatus, 0x1808);
+    printf("PLIC Configured mstatus: 0x%X \n", read_csr(mstatus));
+}
+
+
+
+
+int main()
+{
+    
     UART_init(250000, 0);
 
-    char *msg = "Hello World\r\n";
     printf("core freq at %d Hz\n", get_cpu_freq());
     printf("Elements: %i \n", sizeof(wd_setting)/sizeof(wd_setting[0]));
+
+    for(int i = 0;i< sizeof(wd_setting)/sizeof(wd_setting[0]);i++){
+        for(int x = 0; x < wd_setting[i].num_ints; x++ ){
+            unlock(wd_setting[i].address, &wd_setting[i]);
+            writeReg(wd_reg_ctrl_running, 0, &wd_setting[i].address->unit[x] );
+            unlock(wd_setting[i].address, &wd_setting[i]);
+            writeReg(wd_reg_ctrl_countAlways, 0, &wd_setting[i].address->unit[x] );
+            unlock(wd_setting[i].address, &wd_setting[i]);
+            writeReg(wd_reg_ctrl_cmp_0, 1, &wd_setting[i].address->unit[x] );
+            unlock(wd_setting[i].address, &wd_setting[i]);
+            writeReg(wd_reg_ctrl_cmp_1, 1, &wd_setting[i].address->unit[x] );
+            unlock(wd_setting[i].address, &wd_setting[i]);
+            wd_setting[i].address->unit[x].cfg.field.interrupt = 0;
+            //writeReg(wd_reg_ctrl_ip_0, 0, &wd_setting[i].address->unit[x]);
+            if (readReg(wd_reg_ctrl_ip_0, &wd_setting[i].address->unit[x]) != 0 ){
+                printf("Interrupt not resetted 2\n");
+            }
+        } 
+    }
 
     // Set IO Function to WD Periph 1 and 2
     GPIO_REG(GPIO_IOF_SEL)    &= ~(1<<19);
     GPIO_REG(GPIO_IOF_EN)     |= (1<<19);
     GPIO_REG(GPIO_IOF_SEL)    &= ~(1<<21);
     GPIO_REG(GPIO_IOF_EN)     |= (1<<21);
-   // GPIO_REG(GPIO_OUTPUT_XOR)     |= (1<<21) | (1<<19);
+    GPIO_REG(GPIO_IOF_SEL)    &= ~(1<<22);
+    GPIO_REG(GPIO_IOF_EN)     |= (1<<22);
 
-    int pin = 11;
-    int ans = 0;
-    GPIO_REG(GPIO_OUTPUT_VAL) &= ~(1<<11);
-    GPIO_REG(GPIO_OUTPUT_VAL) &= ~(1<<12);
-    GPIO_REG(GPIO_OUTPUT_VAL) &= ~(1<<13);
-
+    init_plic();
     Console_Task();
-    /*
-    while (1) {
-       // UART_put_char('c',0);
-        //UART_write(msg,0);
-
-
-        GPIO_REG(GPIO_OUTPUT_VAL) |= (1<<pin);
-        delay_ms(100);
-        GPIO_REG(GPIO_OUTPUT_VAL) &= ~(1<<pin);
-        char c;
-        ans = UART_get_char(&c,0);
-        if (c == 'c' && ans == 0){
-           // wdt_reset(wdt_instance);
-            //wdt_reset(0);
-            pin++;
-            if(pin > 13){
-                pin = 11;
-            }
-            printf("Pin %i %s \n", pin,enumStrings[pin-11]);
-        }
-
-        //delay_ms(10000);
-    }*/
     return 0;
 }
 
