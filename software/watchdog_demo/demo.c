@@ -483,8 +483,8 @@ void demo_WD_config(uint8_t selected_watchdog,uint8_t selected_subwatchdog){
                 return;
             }else{
                 State--;
+                State--;
             }
-            return;
         }
     }
 }
@@ -529,14 +529,17 @@ void print_watchdog_config(uint8_t unit, uint8_t subunit){
 void print_watchdog_times(uint32_t clock,uint8_t mode, uint8_t scale, uint64_t count, uint32_t compare0, uint32_t compare1, uint32_t pulsewidth){
     float t_period_scaled = 1.0/(float)(clock>>scale);
     float t_period = 1.0/(float)clock;
-    if (count > compare0 || count > compare1){
+    if (count > compare0){
         count = 0;
     }
     if(mode >0){
-        printf("Time until Trigger is allowed: %f s \n", t_period_scaled*(float)(compare0-count));
-        printf("Time in which Triggering is allowed: %f s \n", t_period_scaled*(float)(compare1-count));
+        if (count > compare1){
+            count = 0;
+        }
+        printf("Time until Trigger is allowed: %f s \n", (t_period_scaled*(float)compare0)-(t_period*(float)count));
+        printf("Time in which Triggering is allowed: %f s \n", (t_period_scaled*(float)compare1)-(t_period*(float)count));
     }else{
-        printf("Time in which Triggering is allowed: %f s \n", t_period_scaled*(float)(compare0-count));
+        printf("Time in which Triggering is allowed: %f s \n", (t_period_scaled*(float)compare0)-(t_period*(float)count));
     }
     printf("Pulsetime: %f s \n", t_period*(float)pulsewidth);
 }

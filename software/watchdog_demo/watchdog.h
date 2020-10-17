@@ -73,13 +73,13 @@
 
     struct wd_settings{
         struct wd_unit *address;
-        uint32_t clock;
+        const uint32_t clock;
         const uint8_t num_ints;
         const struct wd_ints *ints;
-        uint32_t food;
+        const uint32_t food;
         uint32_t key;
-        uint8_t prbs;
-        uint32_t polynom;
+        const uint8_t prbs;
+        const uint32_t polynom;
         char* name;
     };
 
