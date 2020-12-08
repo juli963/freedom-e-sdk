@@ -121,6 +121,12 @@ void writeReg(enum WD_Register reg,uint32_t data, struct wd_element *sWD ){
 
 void configWatchdog(struct wd_element *sWD, struct wd_unit *sWD_global, uint8_t timer, struct wd_settings *setting){
 	unlock(sWD_global ,setting);
+	writeReg(wd_reg_ctrl_countAlways,0,&(sWD_global->unit[timer]));
+    unlock(sWD_global ,setting);
+	writeReg(wd_reg_ctrl_running,0,&(sWD_global->unit[timer]));
+
+
+	unlock(sWD_global ,setting);
 	writeReg(wd_reg_ctrl_scale,sWD->cfg.field.scale,&(sWD_global->unit[timer]));
 	unlock(sWD_global ,setting);
 	writeReg(wd_reg_ctrl_reserved0,sWD->cfg.field.rsv0,&(sWD_global->unit[timer]));
@@ -165,7 +171,7 @@ void updateStruct(struct wd_element *sWD, struct wd_unit *sWD_global, uint8_t ti
 
 void unlock(struct wd_unit *sWD, struct wd_settings *setting){
 	sWD->global.key = setting->key;
-	for(uint32_t i = 0; i<500; i++){	// Add a little idle time before writing next Register
+	for(uint32_t i = 0; i<100; i++){	// Add a little idle time before writing next Register
 		asm("NOP");
 	}
 	if(setting->prbs){

@@ -88,6 +88,14 @@ int main()
     GPIO_REG(GPIO_INPUT_EN)   &= ~(1<<3);
     GPIO_REG(GPIO_OUTPUT_EN)  |= (1<<3);
 
+    // Disable all Interrupt Bits
+    for(uint8_t i = 0;i< sizeof(wd_setting)/sizeof(wd_setting[0]);i++){
+        for(uint8_t x = 0; x < wd_setting[i].num_ints; x++ ){
+            unlock(wd_setting[i].address, &wd_setting[i]);
+            writeReg(wd_reg_ctrl_ip_0,0, &wd_setting[i].address->unit[x] );
+        }
+    }
+
     init_plic();
     Console_Task();
     return 0;
@@ -116,6 +124,7 @@ void init_plic(void)
 void handle_m_ext_interrupt(void){
     uint8_t x,i;
     plic_source int_num  = PLIC_claim_interrupt(&g_plic);
+    GPIO_REG(GPIO_OUTPUT_VAL) &= ~(1<<3);
     // Find Watchdog with corresponding Interrupt channel
     for(i = 0;i< sizeof(wd_setting)/sizeof(wd_setting[0]);i++){
         for(x = 0; x < wd_setting[i].num_ints; x++ ){
@@ -135,7 +144,7 @@ void handle_m_ext_interrupt(void){
     unlock(wd_setting[i].address, &wd_setting[i]);
     writeReg(wd_reg_ctrl_countAlways,0, &wd_setting[i].address->unit[x] );
 
-    GPIO_REG(GPIO_OUTPUT_VAL) ^= (1<<3);
+    
 
     PLIC_complete_interrupt(&g_plic, int_num);
     PLIC_disable_interrupt (&g_plic, int_num);
@@ -457,13 +466,14 @@ void demo_WD_config(uint8_t selected_watchdog,uint8_t selected_subwatchdog){
                 if (temp32 >= 0 && temp32 <= 1){  // Check if Input is within [0,1] else display Error
                     configWatchdog(&temp_watchdog, wd_setting[selected_watchdog].address, selected_subwatchdog, &wd_setting[selected_watchdog]);
                     if (temp32){
-                        GPIO_REG(GPIO_OUTPUT_VAL) ^= (1<<3);
+                        GPIO_REG(GPIO_OUTPUT_VAL) |= (1<<3);
                         PLIC_enable_interrupt (&g_plic, wd_setting[selected_watchdog].ints->channels[selected_subwatchdog]);
                         PLIC_set_priority(&g_plic, wd_setting[selected_watchdog].ints->channels[selected_subwatchdog], 1);
                         printf("Interrupt Channel %i enabled \n", wd_setting[selected_watchdog].ints->channels[selected_subwatchdog]);
                     }else{
                         printf("Interrupt disabled \n");
                     }
+                    
                     print_watchdog_config(selected_watchdog, selected_subwatchdog);
                     return;
                 }else{
